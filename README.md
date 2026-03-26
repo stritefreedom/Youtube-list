@@ -35,3 +35,38 @@
 
 ```bash
 pip install -r requirements.txt
+
+## 執行
+python app.py
+
+## 專案結構
+.
+├─ app.py
+├─ ui/
+├─ core/
+├─ models/
+├─ storage/
+├─ tests/
+
+## 使用方式（MVP）
+開啟程式
+載入圖片
+執行 OCR
+編輯文字框
+點擊翻譯
+匯出圖片
+API Key 設定
+使用者需自行提供：
+OpenAI API Key
+或 Gemini API Key
+Key 會儲存在本機（keyring）
+開發狀態
+
+🚧 MVP 開發中
+
+未來功能
+批次處理
+多頁專案
+術語規則系統
+高級排版
+插件系統
