@@ -11,6 +11,9 @@ from typing import Any
 
 from models.region import Region
 
+_OCR_ENGINE: Any | None = None
+_OCR_INIT_ERROR: str | None = None
+
 
 @dataclass
 class OCRLine:
@@ -67,9 +70,30 @@ def load_expected_regions(path: str | Path) -> list[Region]:
 
 
 def _create_ocr_engine() -> Any:
-    from paddleocr import PaddleOCR
+    global _OCR_ENGINE, _OCR_INIT_ERROR
+    if _OCR_ENGINE is not None:
+        return _OCR_ENGINE
+    if _OCR_INIT_ERROR is not None:
+        raise RuntimeError(_OCR_INIT_ERROR)
 
-    return PaddleOCR(use_angle_cls=False, lang="japan", show_log=False)
+    try:
+        from paddleocr import PaddleOCR
+    except Exception as exc:  # pragma: no cover - import depends on local runtime
+        message = str(exc)
+        if "libGL.so.1" in message:
+            message = (
+                "libGL.so.1 is missing. Install libgl1 in system packages, or use "
+                "opencv-python-headless to avoid OpenCV GUI dependencies."
+            )
+        _OCR_INIT_ERROR = message
+        raise RuntimeError(message) from exc
+
+    try:
+        _OCR_ENGINE = PaddleOCR(use_angle_cls=False, lang="japan", show_log=False)
+        return _OCR_ENGINE
+    except Exception as exc:  # pragma: no cover - depends on local OCR runtime
+        _OCR_INIT_ERROR = str(exc)
+        raise
 
 
 def _extract_lines(image_path: str) -> tuple[list[OCRLine], str | None]:
@@ -142,6 +166,7 @@ def run_ocr(
     image_path: str,
     regions: list[Region],
     expected_ocr_path: str | Path | None = None,
+    allow_fixture_fallback: bool = True,
 ) -> tuple[list[Region], dict[str, Any]]:
     """Run OCR and populate region texts."""
     lines, error = _extract_lines(image_path)
@@ -154,7 +179,7 @@ def run_ocr(
         "mode": "paddleocr",
     }
 
-    if error is not None and expected_ocr_path is not None:
+    if error is not None and expected_ocr_path is not None and allow_fixture_fallback:
         _fallback_fill_text_from_fixture(regions, expected_ocr_path)
         report["mode"] = "fixture_fallback"
         report["filled_count"] = len([r for r in regions if r.text.strip()])
