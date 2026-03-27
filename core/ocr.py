@@ -13,7 +13,7 @@ from typing import Any
 from models.region import Region
 
 _OCR_ENGINE: Any | None = None
-_OCR_INIT_ERROR: str | None = None
+_OCR_INIT_ERROR: Exception | None = None
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_MODEL_DIRS = {
@@ -87,9 +87,7 @@ def build_ocr_init_attempts() -> tuple[list[dict[str, Any]], bool]:
         "rec_model_dir": str(model_dirs["rec"]),
         "cls_model_dir": str(model_dirs["cls"]),
     }
-    if _has_complete_local_models(model_dirs):
-        return [local_kwargs], True
-    return [local_kwargs, {"lang": "japan", "use_angle_cls": False}], False
+    return [local_kwargs], True
 
 
 def _to_xywh(points: list[list[float]]) -> tuple[int, int, int, int]:
@@ -142,21 +140,22 @@ def _create_ocr_engine() -> Any:
     if _OCR_ENGINE is not None:
         return _OCR_ENGINE
     if _OCR_INIT_ERROR is not None:
-        raise RuntimeError(_OCR_INIT_ERROR)
+        raise _OCR_INIT_ERROR
 
     try:
         from paddleocr import PaddleOCR
     except Exception as exc:  # pragma: no cover - import depends on local runtime
-        message = str(exc)
-        if "libGL.so.1" in message:
-            message = (
-                "libGL.so.1 is missing. Install libgl1 in system packages, or use "
-                "opencv-python-headless to avoid OpenCV GUI dependencies."
-            )
-        _OCR_INIT_ERROR = message
-        raise RuntimeError(message) from exc
+        _OCR_INIT_ERROR = exc
+        raise
 
     model_dirs = resolve_paddleocr_model_dirs()
+    if not _has_complete_local_models(model_dirs):
+        missing = {key: str(path) for key, path in model_dirs.items() if not _has_model_files(path)}
+        err = FileNotFoundError(
+            f"Local PaddleOCR models are required but missing or incomplete: {missing}"
+        )
+        _OCR_INIT_ERROR = err
+        raise err
     for key, env_key in _MODEL_ENV_KEYS.items():
         os.environ.setdefault(env_key, str(model_dirs[key]))
 
@@ -188,8 +187,8 @@ def _create_ocr_engine() -> Any:
             continue
 
     assert last_exc is not None
-    _OCR_INIT_ERROR = str(last_exc)
-    raise RuntimeError(_OCR_INIT_ERROR)
+    _OCR_INIT_ERROR = last_exc
+    raise last_exc
 
 
 def _extract_lines(image_path: str) -> tuple[list[OCRLine], str | None]:

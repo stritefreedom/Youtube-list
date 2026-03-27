@@ -14,10 +14,31 @@ if str(REPO_ROOT) not in sys.path:
 from core.ocr import _create_ocr_engine, build_ocr_init_attempts, inspect_paddleocr_model_dirs
 
 
+def _model_file_sizes() -> dict[str, dict[str, object]]:
+    model_root = REPO_ROOT / ".codex" / "models" / "paddleocr"
+    result: dict[str, dict[str, object]] = {}
+    for name in ("det", "rec", "cls"):
+        entry: dict[str, object] = {"dir": str(model_root / name), "files": {}}
+        for filename in ("inference.pdmodel", "inference.pdiparams", "inference.yml"):
+            file_path = model_root / name / filename
+            size = file_path.stat().st_size if file_path.exists() else None
+            invalid_placeholder = (size == 0) if size is not None else True
+            entry["files"][filename] = {
+                "exists": file_path.exists(),
+                "size_bytes": size,
+                "invalid_placeholder": invalid_placeholder,
+            }
+        result[name] = entry
+    return result
+
+
 def main() -> int:
     diagnostics = inspect_paddleocr_model_dirs()
     print("=== PaddleOCR model directory diagnostics ===")
     print(json.dumps(diagnostics, ensure_ascii=False, indent=2))
+
+    print("\n=== PaddleOCR model file sizes ===")
+    print(json.dumps(_model_file_sizes(), ensure_ascii=False, indent=2))
 
     attempts, force_local_only = build_ocr_init_attempts()
     print("\n=== Planned PaddleOCR init kwargs ===")
