@@ -26,6 +26,7 @@ def test_page001_ocr_similarity_report() -> None:
         str(IMAGE_PATH),
         regions,
         expected_ocr_path=EXPECTED_OCR_PATH,
+        allow_fixture_fallback=False,
     )
 
     print("\n[OCR Detection Report]")
@@ -33,6 +34,12 @@ def test_page001_ocr_similarity_report() -> None:
     print("\n[OCR Text Report]")
     print(json.dumps(ocr_report, ensure_ascii=False, indent=2))
 
+    if not ocr_report["ocr_available"]:
+        import pytest
+
+        pytest.skip(f"Real OCR unavailable: {ocr_report['ocr_error']}")
+
+    assert ocr_report["mode"] == "paddleocr"
     assert len(ocr_regions) == expected["expected_count"]
 
     expected_by_id = {item["id"]: item["text"] for item in expected["regions"]}
@@ -55,3 +62,33 @@ def test_page001_ocr_similarity_report() -> None:
 
     below_threshold = [row for row in similarity_rows if row["similarity"] < 0.85]
     assert not below_threshold, f"OCR similarity below threshold: {below_threshold}"
+
+
+def test_page001_ocr_fixture_fallback_report() -> None:
+    expected = _load_expected_ocr()
+
+    regions, _ = detect_regions(
+        str(IMAGE_PATH),
+        expected_regions_path=EXPECTED_REGIONS_PATH,
+    )
+    ocr_regions, ocr_report = run_ocr(
+        str(IMAGE_PATH),
+        regions,
+        expected_ocr_path=EXPECTED_OCR_PATH,
+        allow_fixture_fallback=True,
+    )
+
+    print("\n[OCR Fallback Report]")
+    print(json.dumps(ocr_report, ensure_ascii=False, indent=2))
+
+    if ocr_report["ocr_available"]:
+        import pytest
+
+        pytest.xfail("OCR runtime is available; fallback mode is not expected.")
+
+    assert ocr_report["mode"] == "fixture_fallback"
+    assert len(ocr_regions) == expected["expected_count"]
+
+    expected_by_id = {item["id"]: item["text"] for item in expected["regions"]}
+    for region in ocr_regions:
+        assert region.text == expected_by_id[region.id]
