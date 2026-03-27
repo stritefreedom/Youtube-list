@@ -31,42 +31,77 @@
 
 ---
 
-## 安裝
+## 安裝（建議：乾淨環境 + Headless OpenCV）
 
 ```bash
-pip install -r requirements.txt
+bash scripts/setup_clean_env.sh
+source .venv/bin/activate
+```
+
+此流程會在最後強制移除 GUI 版 OpenCV 套件並重新安裝：
+
+- `opencv-python`（移除）
+- `opencv-contrib-python`（移除）
+- `opencv-python-headless==4.10.0.84`（重裝）
+
+---
 
 ## 執行
+
+```bash
+source .venv/bin/activate
 python app.py
+```
+
+---
 
 ## 專案結構
+
+```text
 .
 ├─ app.py
 ├─ ui/
 ├─ core/
 ├─ models/
 ├─ storage/
-├─ tests/
+├─ scripts/
+└─ tests/
+```
+
+---
 
 ## 使用方式（MVP）
-開啟程式
-載入圖片
-執行 OCR
-編輯文字框
-點擊翻譯
-匯出圖片
-API Key 設定
+
+1. 開啟程式
+2. 載入圖片
+3. 執行 OCR
+4. 編輯文字框
+5. 點擊翻譯
+6. 匯出圖片
+
+---
+
+## API Key 設定
+
 使用者需自行提供：
-OpenAI API Key
-或 Gemini API Key
-Key 會儲存在本機（keyring）
-開發狀態
+
+- OpenAI API Key
+- 或 Gemini API Key
+
+Key 會儲存在本機（keyring）。
+
+---
+
+## 開發狀態
 
 🚧 MVP 開發中
 
-未來功能
-批次處理
-多頁專案
-術語規則系統
-高級排版
-插件系統
+---
+
+## 未來功能
+
+- 批次處理
+- 多頁專案
+- 術語規則系統
+- 高級排版
+- 插件系統

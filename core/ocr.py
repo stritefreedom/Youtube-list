@@ -73,6 +73,25 @@ def inspect_paddleocr_model_dirs() -> dict[str, dict[str, Any]]:
     return diagnostics
 
 
+def _has_complete_local_models(model_dirs: dict[str, Path]) -> bool:
+    return all(_has_model_files(model_dirs[key]) for key in ("det", "rec", "cls"))
+
+
+def build_ocr_init_attempts() -> tuple[list[dict[str, Any]], bool]:
+    """Return PaddleOCR init kwargs attempts and whether local-only mode is enforced."""
+    model_dirs = resolve_paddleocr_model_dirs()
+    local_kwargs = {
+        "lang": "japan",
+        "use_angle_cls": False,
+        "det_model_dir": str(model_dirs["det"]),
+        "rec_model_dir": str(model_dirs["rec"]),
+        "cls_model_dir": str(model_dirs["cls"]),
+    }
+    if _has_complete_local_models(model_dirs):
+        return [local_kwargs], True
+    return [local_kwargs, {"lang": "japan", "use_angle_cls": False}], False
+
+
 def _to_xywh(points: list[list[float]]) -> tuple[int, int, int, int]:
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
@@ -141,42 +160,32 @@ def _create_ocr_engine() -> Any:
     for key, env_key in _MODEL_ENV_KEYS.items():
         os.environ.setdefault(env_key, str(model_dirs[key]))
 
-    attempts: list[dict[str, Any]] = [
-        {
-            "lang": "japan",
-            "use_textline_orientation": False,
-            "text_detection_model_dir": str(model_dirs["det"]),
-            "text_recognition_model_dir": str(model_dirs["rec"]),
-            "textline_orientation_model_dir": str(model_dirs["cls"]),
-        },
-        {
-            "lang": "japan",
-            "use_angle_cls": False,
-            "det_model_dir": str(model_dirs["det"]),
-            "rec_model_dir": str(model_dirs["rec"]),
-            "cls_model_dir": str(model_dirs["cls"]),
-        },
-        {
-            "lang": "japan",
-            "use_textline_orientation": False,
-        },
-        {
-            "lang": "japan",
-            "use_angle_cls": False,
-        },
-    ]
+    attempts, force_local_only = build_ocr_init_attempts()
+    print("=== PaddleOCR init attempts ===")
+    print(f"force_local_only={force_local_only}")
 
     last_exc: Exception | None = None
-    for kwargs in attempts:
+    for idx, kwargs in enumerate(attempts, start=1):
+        print(f"[attempt {idx}] kwargs={json.dumps(kwargs, ensure_ascii=False, sort_keys=True)}")
+        print(
+            "[attempt {idx}] det_model_dir={det} rec_model_dir={rec} cls_model_dir={cls} "
+            "lang={lang} use_angle_cls={use_angle_cls}".format(
+                idx=idx,
+                det=kwargs.get("det_model_dir"),
+                rec=kwargs.get("rec_model_dir"),
+                cls=kwargs.get("cls_model_dir"),
+                lang=kwargs.get("lang"),
+                use_angle_cls=kwargs.get("use_angle_cls"),
+            )
+        )
         try:
             _OCR_ENGINE = PaddleOCR(**kwargs)
+            print(f"[attempt {idx}] init_result=success")
             return _OCR_ENGINE
         except Exception as exc:  # pragma: no cover - depends on local OCR runtime
             last_exc = exc
-            if "Unknown argument:" in str(exc):
-                continue
-            _OCR_INIT_ERROR = str(exc)
-            raise
+            print(f"[attempt {idx}] init_result=error: {exc!r}")
+            continue
 
     assert last_exc is not None
     _OCR_INIT_ERROR = str(last_exc)
