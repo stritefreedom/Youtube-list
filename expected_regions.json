@@ -1,0 +1,104 @@
+{
+  "image": "page001.png",
+  "width": 1280,
+  "height": 720,
+  "expected_count": 15,
+  "notes": [
+    "只包含主要對話框與明顯文字區",
+    "不包含音效字「ピコーン」",
+    "不包含手機畫面上的小型UI文字",
+    "bbox為人工估算，容許誤差建議 ±10~20 px"
+  ],
+  "regions": [
+    {
+      "id": "r001",
+      "type": "dialogue",
+      "panel": "top_left",
+      "bbox": [465, 115, 125, 175]
+    },
+    {
+      "id": "r002",
+      "type": "dialogue",
+      "panel": "top_left",
+      "bbox": [110, 245, 150, 165]
+    },
+    {
+      "id": "r003",
+      "type": "dialogue",
+      "panel": "top_right",
+      "bbox": [935, 155, 135, 170]
+    },
+    {
+      "id": "r004",
+      "type": "dialogue",
+      "panel": "top_right",
+      "bbox": [1000, 280, 110, 135]
+    },
+    {
+      "id": "r005",
+      "type": "dialogue",
+      "panel": "top_right",
+      "bbox": [735, 330, 125, 135]
+    },
+    {
+      "id": "r006",
+      "type": "dialogue",
+      "panel": "top_right",
+      "bbox": [905, 380, 135, 140]
+    },
+    {
+      "id": "r007",
+      "type": "dialogue",
+      "panel": "middle_left",
+      "bbox": [85, 405, 90, 115]
+    },
+    {
+      "id": "r008",
+      "type": "dialogue",
+      "panel": "middle_left",
+      "bbox": [350, 395, 135, 145]
+    },
+    {
+      "id": "r009",
+      "type": "dialogue",
+      "panel": "bottom_left",
+      "bbox": [120, 590, 100, 120]
+    },
+    {
+      "id": "r010",
+      "type": "dialogue",
+      "panel": "bottom_left",
+      "bbox": [525, 535, 130, 145]
+    },
+    {
+      "id": "r011",
+      "type": "dialogue",
+      "panel": "middle_right",
+      "bbox": [885, 365, 145, 145]
+    },
+    {
+      "id": "r012",
+      "type": "dialogue",
+      "panel": "bottom_right",
+      "bbox": [735, 565, 90, 105]
+    },
+    {
+      "id": "r013",
+      "type": "dialogue",
+      "panel": "bottom_right",
+      "bbox": [920, 535, 130, 140]
+    },
+    {
+      "id": "r014",
+      "type": "caption",
+      "panel": "bottom_right",
+      "bbox": [875, 610, 75, 85]
+    },
+    {
+      "id": "r015",
+      "type": "dialogue",
+      "panel": "bottom_right",
+      "bbox": [1035, 555, 145, 155]
+    }
+  ]
+}
