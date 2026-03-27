@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -14,6 +15,18 @@ from models.region import Region
 _OCR_ENGINE: Any | None = None
 _OCR_INIT_ERROR: str | None = None
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_MODEL_DIRS = {
+    "det": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "det",
+    "rec": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "rec",
+    "cls": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "cls",
+}
+_MODEL_ENV_KEYS = {
+    "det": "PADDLEOCR_DET_MODEL_DIR",
+    "rec": "PADDLEOCR_REC_MODEL_DIR",
+    "cls": "PADDLEOCR_CLS_MODEL_DIR",
+}
+
 
 @dataclass
 class OCRLine:
@@ -22,6 +35,42 @@ class OCRLine:
     bbox: tuple[int, int, int, int]
     text: str
     confidence: float
+
+
+def _has_model_files(model_dir: Path) -> bool:
+    if not model_dir.exists() or not model_dir.is_dir():
+        return False
+    expected_names = {"inference.pdmodel", "inference.pdiparams", "inference.yml"}
+    actual_names = {p.name for p in model_dir.iterdir() if p.is_file()}
+    if expected_names & actual_names:
+        return True
+    return any(
+        p.is_file() and p.suffix.lower() in {".pdmodel", ".pdiparams", ".onnx"}
+        for p in model_dir.iterdir()
+    )
+
+
+def resolve_paddleocr_model_dirs() -> dict[str, Path]:
+    """Resolve PaddleOCR model directories from env vars with local fallback."""
+    resolved: dict[str, Path] = {}
+    for key, env_name in _MODEL_ENV_KEYS.items():
+        env_value = os.environ.get(env_name)
+        model_dir = Path(env_value).expanduser() if env_value else _DEFAULT_MODEL_DIRS[key]
+        resolved[key] = model_dir.resolve()
+    return resolved
+
+
+def inspect_paddleocr_model_dirs() -> dict[str, dict[str, Any]]:
+    """Return diagnostics for local PaddleOCR model directories."""
+    diagnostics: dict[str, dict[str, Any]] = {}
+    for key, path in resolve_paddleocr_model_dirs().items():
+        diagnostics[key] = {
+            "env_key": _MODEL_ENV_KEYS[key],
+            "path": str(path),
+            "exists": path.exists(),
+            "has_model_files": _has_model_files(path),
+        }
+    return diagnostics
 
 
 def _to_xywh(points: list[list[float]]) -> tuple[int, int, int, int]:
@@ -89,7 +138,15 @@ def _create_ocr_engine() -> Any:
         raise RuntimeError(message) from exc
 
     try:
-        _OCR_ENGINE = PaddleOCR(use_angle_cls=False, lang="japan", show_log=False)
+        model_dirs = resolve_paddleocr_model_dirs()
+        _OCR_ENGINE = PaddleOCR(
+            use_angle_cls=False,
+            lang="japan",
+            show_log=False,
+            det_model_dir=str(model_dirs["det"]),
+            rec_model_dir=str(model_dirs["rec"]),
+            cls_model_dir=str(model_dirs["cls"]),
+        )
         return _OCR_ENGINE
     except Exception as exc:  # pragma: no cover - depends on local OCR runtime
         _OCR_INIT_ERROR = str(exc)
