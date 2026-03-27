@@ -137,20 +137,50 @@ def _create_ocr_engine() -> Any:
         _OCR_INIT_ERROR = message
         raise RuntimeError(message) from exc
 
-    try:
-        model_dirs = resolve_paddleocr_model_dirs()
-        _OCR_ENGINE = PaddleOCR(
-            use_angle_cls=False,
-            lang="japan",
-            show_log=False,
-            det_model_dir=str(model_dirs["det"]),
-            rec_model_dir=str(model_dirs["rec"]),
-            cls_model_dir=str(model_dirs["cls"]),
-        )
-        return _OCR_ENGINE
-    except Exception as exc:  # pragma: no cover - depends on local OCR runtime
-        _OCR_INIT_ERROR = str(exc)
-        raise
+    model_dirs = resolve_paddleocr_model_dirs()
+    for key, env_key in _MODEL_ENV_KEYS.items():
+        os.environ.setdefault(env_key, str(model_dirs[key]))
+
+    attempts: list[dict[str, Any]] = [
+        {
+            "lang": "japan",
+            "use_textline_orientation": False,
+            "text_detection_model_dir": str(model_dirs["det"]),
+            "text_recognition_model_dir": str(model_dirs["rec"]),
+            "textline_orientation_model_dir": str(model_dirs["cls"]),
+        },
+        {
+            "lang": "japan",
+            "use_angle_cls": False,
+            "det_model_dir": str(model_dirs["det"]),
+            "rec_model_dir": str(model_dirs["rec"]),
+            "cls_model_dir": str(model_dirs["cls"]),
+        },
+        {
+            "lang": "japan",
+            "use_textline_orientation": False,
+        },
+        {
+            "lang": "japan",
+            "use_angle_cls": False,
+        },
+    ]
+
+    last_exc: Exception | None = None
+    for kwargs in attempts:
+        try:
+            _OCR_ENGINE = PaddleOCR(**kwargs)
+            return _OCR_ENGINE
+        except Exception as exc:  # pragma: no cover - depends on local OCR runtime
+            last_exc = exc
+            if "Unknown argument:" in str(exc):
+                continue
+            _OCR_INIT_ERROR = str(exc)
+            raise
+
+    assert last_exc is not None
+    _OCR_INIT_ERROR = str(last_exc)
+    raise RuntimeError(_OCR_INIT_ERROR)
 
 
 def _extract_lines(image_path: str) -> tuple[list[OCRLine], str | None]:
