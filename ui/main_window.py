@@ -8,13 +8,16 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from core.image_loader import load_image
+from core.ocr import detect_regions, run_ocr
 
 
 class ImageScrollArea(QScrollArea):
@@ -101,6 +104,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Manga Translator Studio")
         self.resize(1000, 700)
+        self.current_image_path: str | None = None
 
         self.image_label = QLabel("請先載入 PNG / JPG 圖片")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -112,16 +116,29 @@ class MainWindow(QMainWindow):
         self.open_button = QPushButton("開啟圖片")
         self.open_button.clicked.connect(self.open_image)
 
+        self.ocr_button = QPushButton("執行 OCR")
+        self.ocr_button.clicked.connect(self.run_ocr_for_current_image)
+        self.ocr_button.setEnabled(False)
+
+        self.ocr_text_view = QTextEdit()
+        self.ocr_text_view.setReadOnly(True)
+        self.ocr_text_view.setPlaceholderText("OCR 結果會顯示在這裡。")
+
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
         open_action = QAction("開啟圖片", self)
         open_action.triggered.connect(self.open_image)
         toolbar.addAction(open_action)
+        ocr_action = QAction("執行 OCR", self)
+        ocr_action.triggered.connect(self.run_ocr_for_current_image)
+        toolbar.addAction(ocr_action)
 
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.addWidget(self.open_button)
+        layout.addWidget(self.ocr_button)
         layout.addWidget(self.scroll_area)
+        layout.addWidget(self.ocr_text_view)
         self.setCentralWidget(container)
 
         self.statusBar().showMessage("就緒（Ctrl + 滾輪縮放，左鍵拖曳平移）")
@@ -146,4 +163,48 @@ class MainWindow(QMainWindow):
             return
 
         self.scroll_area.set_base_pixmap(pixmap)
+        self.current_image_path = file_path
+        self.ocr_button.setEnabled(True)
+        self.ocr_text_view.clear()
         self.statusBar().showMessage(f"已載入：{file_path}（Ctrl + 滾輪縮放，左鍵拖曳平移）")
+
+    def run_ocr_for_current_image(self) -> None:
+        """Run OCR for current image and show recognized text in a text panel."""
+        if not self.current_image_path:
+            QMessageBox.information(self, "尚未載入圖片", "請先載入圖片再執行 OCR。")
+            return
+
+        self.statusBar().showMessage("OCR 執行中，請稍候...")
+        self.ocr_text_view.setPlainText("OCR 執行中...")
+        self.repaint()
+
+        regions, det_report = detect_regions(self.current_image_path)
+        ocr_regions, ocr_report = run_ocr(self.current_image_path, regions)
+
+        if not ocr_report.get("ocr_available", False):
+            err = ocr_report.get("ocr_error") or "未知錯誤"
+            self.ocr_text_view.setPlainText(f"OCR 不可用：{err}")
+            self.statusBar().showMessage("OCR 失敗：請確認本機 OCR 依賴與模型環境")
+            return
+
+        rows: list[str] = []
+        for index, region in enumerate(ocr_regions, start=1):
+            text = region.text.strip()
+            if not text:
+                continue
+            rows.append(f"[{index:03d}] {text}")
+
+        if not rows:
+            rows.append("未偵測到可用文字。")
+
+        report_summary = [
+            "=== OCR 執行摘要 ===",
+            f"engine: {det_report.get('engine', 'unknown')}",
+            f"偵測框數量: {det_report.get('region_count', 0)}",
+            f"填入文字區數量: {ocr_report.get('filled_count', 0)}",
+            "",
+            "=== OCR 文字 ===",
+            *rows,
+        ]
+        self.ocr_text_view.setPlainText("\n".join(report_summary))
+        self.statusBar().showMessage("OCR 完成")
