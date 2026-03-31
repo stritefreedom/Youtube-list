@@ -117,3 +117,5 @@
 - `core/ocr.py` 仍保留 `detect_regions` / `run_ocr` 對外介面，並保留 fixture fallback 行為，避免測試流程中斷。
 - 測試 `tests/test_ocr_page001.py` 已更新為新模式 `manga_ocr_pipeline` 的斷言。
 - `scripts/verify_real_ocr.py` 已改為使用目前主流程進行 OCR runtime 驗證。
+- 完成 Task 03「圖片縮放與拖曳」：`ui/main_window.py` 新增 `ImageScrollArea`，支援 `Ctrl + 滾輪` 縮放（0.2x ~ 5.0x）與滑鼠左鍵拖曳平移。
+- 載入新圖片時會重置縮放倍率，狀態列新增操作提示，方便 MVP 階段驗收互動流程。
