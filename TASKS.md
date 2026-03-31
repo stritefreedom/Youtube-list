@@ -121,3 +121,6 @@
 - `scripts/verify_real_ocr.py` 已改為使用目前主流程進行 OCR runtime 驗證。
 - 完成 Task 03「圖片縮放與拖曳」：`ui/main_window.py` 新增 `ImageScrollArea`，支援 `Ctrl + 滾輪` 縮放（0.2x ~ 5.0x）與滑鼠左鍵拖曳平移。
 - 載入新圖片時會重置縮放倍率，狀態列新增操作提示，方便 MVP 階段驗收互動流程。
+- 主視窗新增「執行 OCR」按鈕與工具列入口，載入圖片後可直接觸發 `core.ocr.detect_regions` + `core.ocr.run_ocr`。
+- 主視窗新增 OCR 文字視窗（唯讀），會顯示 OCR 執行摘要（engine / 偵測框數 / 填入文字區數）與文字結果清單。
+- 若尚未載圖或本機 OCR runtime 不可用，UI 會顯示提示訊息，避免無回饋操作。
