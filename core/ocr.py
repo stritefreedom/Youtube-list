@@ -1,9 +1,8 @@
-"""OCR integration using PaddleOCR for local manga images."""
+"""OCR integration using manga_ocr_pipeline as the primary runtime."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -12,92 +11,23 @@ from typing import Any
 
 from models.region import Region
 
-_OCR_ENGINE: Any | None = None
-_OCR_INIT_ERROR: Exception | None = None
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_MODEL_DIRS = {
-    "det": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "det",
-    "rec": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "rec",
-    "cls": _REPO_ROOT / ".codex" / "models" / "paddleocr" / "cls",
-}
-_MODEL_ENV_KEYS = {
-    "det": "PADDLEOCR_DET_MODEL_DIR",
-    "rec": "PADDLEOCR_REC_MODEL_DIR",
-    "cls": "PADDLEOCR_CLS_MODEL_DIR",
-}
 
 
 @dataclass
 class OCRLine:
-    """Single OCR text line from PaddleOCR."""
+    """Single OCR text line from manga_ocr_pipeline output."""
 
     bbox: tuple[int, int, int, int]
     text: str
     confidence: float
 
 
-def _has_model_files(model_dir: Path) -> bool:
-    if not model_dir.exists() or not model_dir.is_dir():
-        return False
-    expected_names = {"inference.pdmodel", "inference.pdiparams", "inference.yml"}
-    actual_names = {p.name for p in model_dir.iterdir() if p.is_file()}
-    if expected_names & actual_names:
-        return True
-    return any(
-        p.is_file() and p.suffix.lower() in {".pdmodel", ".pdiparams", ".onnx"}
-        for p in model_dir.iterdir()
-    )
-
-
-def resolve_paddleocr_model_dirs() -> dict[str, Path]:
-    """Resolve PaddleOCR model directories from env vars with local fallback."""
-    resolved: dict[str, Path] = {}
-    for key, env_name in _MODEL_ENV_KEYS.items():
-        env_value = os.environ.get(env_name)
-        model_dir = Path(env_value).expanduser() if env_value else _DEFAULT_MODEL_DIRS[key]
-        resolved[key] = model_dir.resolve()
-    return resolved
-
-
-def inspect_paddleocr_model_dirs() -> dict[str, dict[str, Any]]:
-    """Return diagnostics for local PaddleOCR model directories."""
-    diagnostics: dict[str, dict[str, Any]] = {}
-    for key, path in resolve_paddleocr_model_dirs().items():
-        diagnostics[key] = {
-            "env_key": _MODEL_ENV_KEYS[key],
-            "path": str(path),
-            "exists": path.exists(),
-            "has_model_files": _has_model_files(path),
-        }
-    return diagnostics
-
-
-def _has_complete_local_models(model_dirs: dict[str, Path]) -> bool:
-    return all(_has_model_files(model_dirs[key]) for key in ("det", "rec", "cls"))
-
-
-def build_ocr_init_attempts() -> tuple[list[dict[str, Any]], bool]:
-    """Return PaddleOCR init kwargs attempts and whether local-only mode is enforced."""
-    model_dirs = resolve_paddleocr_model_dirs()
-    local_kwargs = {
-        "lang": "japan",
-        "use_angle_cls": False,
-        "det_model_dir": str(model_dirs["det"]),
-        "rec_model_dir": str(model_dirs["rec"]),
-        "cls_model_dir": str(model_dirs["cls"]),
-    }
-    return [local_kwargs], True
-
-
-def _to_xywh(points: list[list[float]]) -> tuple[int, int, int, int]:
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    x_min = int(min(xs))
-    y_min = int(min(ys))
-    x_max = int(max(xs))
-    y_max = int(max(ys))
-    return x_min, y_min, x_max - x_min, y_max - y_min
+def _to_xywh(item: dict[str, Any]) -> tuple[int, int, int, int]:
+    x1 = int(item["x1"])
+    y1 = int(item["y1"])
+    x2 = int(item["x2"])
+    y2 = int(item["y2"])
+    return x1, y1, x2 - x1, y2 - y1
 
 
 def _normalize_text(text: str) -> str:
@@ -135,84 +65,36 @@ def load_expected_regions(path: str | Path) -> list[Region]:
     return regions
 
 
-def _create_ocr_engine() -> Any:
-    global _OCR_ENGINE, _OCR_INIT_ERROR
-    if _OCR_ENGINE is not None:
-        return _OCR_ENGINE
-    if _OCR_INIT_ERROR is not None:
-        raise _OCR_INIT_ERROR
-
-    try:
-        from paddleocr import PaddleOCR
-    except Exception as exc:  # pragma: no cover - import depends on local runtime
-        _OCR_INIT_ERROR = exc
-        raise
-
-    model_dirs = resolve_paddleocr_model_dirs()
-    if not _has_complete_local_models(model_dirs):
-        missing = {key: str(path) for key, path in model_dirs.items() if not _has_model_files(path)}
-        err = FileNotFoundError(
-            f"Local PaddleOCR models are required but missing or incomplete: {missing}"
-        )
-        _OCR_INIT_ERROR = err
-        raise err
-    for key, env_key in _MODEL_ENV_KEYS.items():
-        os.environ.setdefault(env_key, str(model_dirs[key]))
-
-    attempts, force_local_only = build_ocr_init_attempts()
-    print("=== PaddleOCR init attempts ===")
-    print(f"force_local_only={force_local_only}")
-
-    last_exc: Exception | None = None
-    for idx, kwargs in enumerate(attempts, start=1):
-        print(f"[attempt {idx}] kwargs={json.dumps(kwargs, ensure_ascii=False, sort_keys=True)}")
-        print(
-            "[attempt {idx}] det_model_dir={det} rec_model_dir={rec} cls_model_dir={cls} "
-            "lang={lang} use_angle_cls={use_angle_cls}".format(
-                idx=idx,
-                det=kwargs.get("det_model_dir"),
-                rec=kwargs.get("rec_model_dir"),
-                cls=kwargs.get("cls_model_dir"),
-                lang=kwargs.get("lang"),
-                use_angle_cls=kwargs.get("use_angle_cls"),
-            )
-        )
-        try:
-            _OCR_ENGINE = PaddleOCR(**kwargs)
-            print(f"[attempt {idx}] init_result=success")
-            return _OCR_ENGINE
-        except Exception as exc:  # pragma: no cover - depends on local OCR runtime
-            last_exc = exc
-            print(f"[attempt {idx}] init_result=error: {exc!r}")
-            continue
-
-    assert last_exc is not None
-    _OCR_INIT_ERROR = last_exc
-    raise last_exc
-
-
 def _extract_lines(image_path: str) -> tuple[list[OCRLine], str | None]:
     try:
-        ocr = _create_ocr_engine()
-        raw = ocr.ocr(image_path, cls=False)
+        from .manga_ocr_pipeline import run_pipeline
+
+        output = run_pipeline(
+            image_path=image_path,
+            threshold=0.25,
+            crop_padding=4,
+            save_crops=False,
+            reading_mode="auto",
+            batch_size=8,
+        )
     except Exception as exc:  # pragma: no cover - depends on local OCR runtime
         return [], str(exc)
 
     lines: list[OCRLine] = []
-    for page in raw:
-        if not page:
+    for row in output.get("results", []):
+        box = _to_xywh(row)
+        text = str(row.get("text", "")).strip()
+        conf = float(row.get("score", 0.0))
+
+        if _is_small_ui_box(box):
             continue
-        for line in page:
-            box = _to_xywh(line[0])
-            text = str(line[1][0]).strip()
-            conf = float(line[1][1])
-            if _is_small_ui_box(box):
-                continue
-            if _is_sound_effect(text):
-                continue
-            if not text:
-                continue
-            lines.append(OCRLine(bbox=box, text=text, confidence=conf))
+        if _is_sound_effect(text):
+            continue
+        if not text:
+            continue
+
+        lines.append(OCRLine(bbox=box, text=text, confidence=conf))
+
     return lines, None
 
 
@@ -220,17 +102,14 @@ def detect_regions(
     image_path: str,
     expected_regions_path: str | Path | None = None,
 ) -> tuple[list[Region], dict[str, Any]]:
-    """Detect text regions for OCR.
-
-    For MVP test stability, this function uses expected region fixtures as anchor boxes
-    when provided, while still attempting PaddleOCR for a comparison report.
-    """
+    """Detect text regions for OCR using manga_ocr_pipeline."""
     lines, error = _extract_lines(image_path)
     report: dict[str, Any] = {
         "ocr_available": error is None,
         "ocr_error": error,
         "raw_line_count": len(lines),
         "raw_boxes": [list(line.bbox) for line in lines],
+        "engine": "manga_ocr_pipeline",
     }
 
     if expected_regions_path is not None:
@@ -263,7 +142,7 @@ def run_ocr(
     expected_ocr_path: str | Path | None = None,
     allow_fixture_fallback: bool = True,
 ) -> tuple[list[Region], dict[str, Any]]:
-    """Run OCR and populate region texts."""
+    """Run OCR and populate region texts using manga_ocr_pipeline output."""
     lines, error = _extract_lines(image_path)
 
     report: dict[str, Any] = {
@@ -271,7 +150,7 @@ def run_ocr(
         "ocr_error": error,
         "line_count": len(lines),
         "unmatched_regions": [],
-        "mode": "paddleocr",
+        "mode": "manga_ocr_pipeline",
     }
 
     if error is not None and expected_ocr_path is not None and allow_fixture_fallback:

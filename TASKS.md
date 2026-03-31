@@ -106,3 +106,14 @@
 - 術語系統
 - JSON 專案
 - 預覽視窗
+
+---
+
+## 進度紀錄
+
+### 2026-03-31
+
+- OCR 主流程已由 `core/ocr.py` 轉為以 `core/manga_ocr_pipeline.py` 為主（偵測文字框 + 逐框 OCR）。
+- `core/ocr.py` 仍保留 `detect_regions` / `run_ocr` 對外介面，並保留 fixture fallback 行為，避免測試流程中斷。
+- 測試 `tests/test_ocr_page001.py` 已更新為新模式 `manga_ocr_pipeline` 的斷言。
+- `scripts/verify_real_ocr.py` 已改為使用目前主流程進行 OCR runtime 驗證。
