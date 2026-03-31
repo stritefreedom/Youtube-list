@@ -49,7 +49,9 @@
 ---
 
 ### Task 05：OCR 整合
-- 整合 PaddleOCR
+- 整合 `manga_ocr_pipeline`
+- 文字框偵測：RT-DETR-v2
+- 文字辨識：manga-ocr-base
 - 對圖片執行 OCR
 
 完成條件：
