@@ -39,7 +39,7 @@ def test_page001_ocr_similarity_report() -> None:
 
         pytest.skip(f"Real OCR unavailable: {ocr_report['ocr_error']}")
 
-    assert ocr_report["mode"] == "paddleocr"
+    assert ocr_report["mode"] == "manga_ocr_pipeline"
     assert len(ocr_regions) == expected["expected_count"]
 
     expected_by_id = {item["id"]: item["text"] for item in expected["regions"]}
